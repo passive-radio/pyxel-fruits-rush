@@ -6,6 +6,7 @@ from component import *
 from system import *
 from screen import *
 from font import BDFRenderer
+from level import LevelManager
 
 version = '0.1.dev'
 
@@ -18,12 +19,6 @@ class App(World):
         self.count_frame = 0
         self.scene_systems: dict[list] = {}
         self.scene_screens: dict[list] = {}
-        self.schedule: dict[dict] = {"launch": {"launch": 0, "start-playing": 0},
-            "choose-difficulty": {"choose-difficulty": 0, "start-playing": 0},
-            "start-playing": {"start-timer": 0},
-            "main": {"main": 0, "update-resources": 0, "cal-result": 0},
-            "result": {"difficulty-up": 0},
-            "update-resources": {"update-resources": 0}}
         self.font_base = BDFRenderer("assets/font/umplus_j12r.bdf")
         self.next_scene = None
         self.time_left_to_sc = 10
@@ -102,6 +97,19 @@ if __name__ == "__main__":
     app.add_screen(sc_main_screen(app), ["main", "update-resources"])
     app.add_screen(sc_choose_difficulty(app), ["choose-difficulty"])
     app.add_screen(sc_show_result(app), ["result"])
+    
+    app.level_manager = LevelManager()
+    
+    app.level_manager.add_scenes(["launch", "choose-difficulty", "start-playing", "main", "result"])
+    app.level_manager.add_scene_events("start-playing", "start-timer", lambda: pyxel.btnp(pyxel.KEY_RETURN))
+    app.level_manager.add_scene_events("main", "update-resources", lambda: pyxel.btnp(pyxel.KEY_SPACE))
+    app.level_manager.add_scene_events("main", "cal-result", lambda: app.time_left_to_sc <= 0)
+    app.level_manager.add_scene_events("result", "difficulty-up", lambda: pyxel.btnp(pyxel.KEY_RETURN))
+    app.level_manager.add_scene_map("launch", "choose-difficulty", lambda: pyxel.btnp(pyxel.KEY_RETURN))
+    app.level_manager.add_scene_map("choose-difficulty", "start-playing", lambda: pyxel.btnp(pyxel.KEY_RETURN))
+    app.level_manager.add_scene_map("start-playing", "main", lambda: pyxel.btnp(pyxel.KEY_RETURN))
+    app.level_manager.add_scene_map("main", "result", lambda: app.time_left_to_sc <= 0)
+    app.level_manager.add_scene_map("result", "start-playing", lambda: pyxel.btnp(pyxel.KEY_RETURN))
     
     app.current_scene = "launch"
     app.run()

@@ -3,6 +3,7 @@ import time
 import random
 
 from world import World
+from level import LevelManager
 from component import *
 
 version = '0.1.dev'
@@ -24,10 +25,10 @@ class SceneTransition():
 class ev_update_resources(System):
     def __init__(self, world, priority: int = 0) -> None:
         super().__init__(world, priority)
-        self.tag = "update-resources"
+        self.event = "update-resources"
     
     def process(self):
-        if self.world.schedule[self.world.current_scene][self.tag] != 1:
+        if self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] != 1:
             return
         
         for entity, (player, resources) in self.world.get_components(PlayerComponent, ResourcesComponent):
@@ -35,43 +36,27 @@ class ev_update_resources(System):
             resources.banana += 1
             # print(resources.apple, resources.banana)
             
-        self.world.schedule[self.world.current_scene][self.tag] = 0
+        self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] = 0
         self.world.current_scene = "main"
         
 class sys_handle_input(System):
     def __init__(self, world, priority: int = 0) -> None:
         super().__init__(world, priority)
         
-        self.scenes_transitions = SceneTransition(
-            scenes = ["launch", "choose-difficulty", "start-playing", "main", "result"],
-            events = {"launch": {},
-                    "choose-difficulty": {},
-                    "start-playing": {"start-timer": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-                    "main": {"update-resources": lambda: pyxel.btnp(pyxel.KEY_SPACE),
-                            "cal-result": lambda: self.world.time_left_to_sc <= 0},
-                    "result": {"difficulty-up": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-            },
-            to = {"launch": {"choose-difficulty": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-                "choose-difficulty": {"start-playing": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-                "start-playing": {"main": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-                "main": {"result": lambda: self.world.time_left_to_sc <= 0},
-                "result": {"start-playing": lambda: pyxel.btnp(pyxel.KEY_RETURN)},
-            },
-        )
-        
     def process(self):
-        if self.world.current_scene not in self.scenes_transitions.scenes:
+        self.world.level_manager: LevelManager
+        if self.world.current_scene not in self.world.level_manager.scenes:
             # print("scene not found!")
             return
         # cli_text = f"Current scene: {self.world.current_scene} --------\nEvent candidates..\n"
-        for event, triger in self.scenes_transitions.events[self.world.current_scene].items():
+        for event, triger in self.world.level_manager.scenes_events[self.world.current_scene].items():
             # cli_text += f"Event: {event}, Triger: {triger}\n"
-            if triger():
-                self.world.schedule[self.world.current_scene][event] = 1
+            if triger["triger"]():
+                self.world.level_manager.update_scene_event(self.world.current_scene, event, 1)
                 # self.world.current_scene = event
                 # print("Next Event:", self.world.current_scene, "!")
                 
-        for scene, triger in self.scenes_transitions.to[self.world.current_scene].items():
+        for scene, triger in self.world.level_manager.scenes_map[self.world.current_scene].items():
             if triger():
                 self.world.next_scene = scene
                 # print("Next scene:", self.world.next_scene)
@@ -84,9 +69,9 @@ class ev_start_timer(System):
         self.event = "start-timer"
     
     def process(self):
-        if self.world.schedule[self.world.current_scene][self.event] != 1:
+        if self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] != 1:
             return
-        self.world.schedule[self.world.current_scene][self.event] = 0
+        self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] = 0
         self.world.start_time = time.time()
         self.world.prev_time = self.world.start_time
 
@@ -96,9 +81,9 @@ class ev_cal_result(System):
         self.event = "cal-result"
     
     def process(self):
-        if self.world.schedule[self.world.current_scene][self.event] != 1:
+        if self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] != 1:
             return
-        self.world.schedule[self.world.current_scene][self.event] = 0
+        self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] = 0
         winner = None
         max_score = 0
         for entity, (resourecs) in self.world.get_component(ResourcesComponent):
@@ -171,7 +156,7 @@ class ev_difficulty_manager(System):
         self.event = "difficulty-up"
         
     def process(self):
-        if self.world.schedule[self.world.current_scene][self.event] != 1:
+        if self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] != 1:
             return
         level = None
         for entity, opponent in self.world.get_component(NPOpponentComponent):
@@ -181,7 +166,7 @@ class ev_difficulty_manager(System):
             elif self.world.winner == 0 and level is not None and level > 1:
                 self.world.next_scene = "launch"
         print("Next level:", level)
-        self.world.schedule[self.world.current_scene][self.event] = 0
+        self.world.level_manager.scenes_events[self.world.current_scene][self.event]["run"] = 0
         
         for entity, player in self.world.get_component(ResourcesComponent):
             player.apple = 0
